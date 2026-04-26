@@ -16,25 +16,8 @@ void build_direct_substitute(){
     }
 }
 
-void substitute_bytes() {
-    // For each byte in the message
-    for (int column = 0; column < BLOCK_SIZE; column++) {
-        for (int row = 0; row < BLOCK_SIZE; row++) {
-            // Search for the byte in the original character list
-            // and replace it with corresponding the element in the substituted character list
-            message[row][column] = directSubstitute[message[row][column]];
-        }
-    }
-}
-
-/*
- * This function shifts each row by the number of places it is meant to be shifted according to the AES specification.
- * Row zero is shifted by zero places. Row one by one, etc.
- * This corresponds to step 2.2 in the VV-AES explanation.
- */
-void shift_rows() {
-    // Shift each row, where the row index corresponds to how many columns the data is shifted.
-    for (int row = 0; row < BLOCK_SIZE; ++row) {
+void substitute_and_shift_rows() {
+    for (int row = 0; row < BLOCK_SIZE; row++) {
         uint8_t oldRow[BLOCK_SIZE];
 
         for (int col = 0; col < BLOCK_SIZE; col++) {
@@ -42,23 +25,11 @@ void shift_rows() {
         }
 
         for (int col = 0; col < BLOCK_SIZE; col++) {
-            message[row][col] = oldRow[(col + row) % BLOCK_SIZE];
+            message[row][col] = directSubstitute[oldRow[(col + row) % BLOCK_SIZE]];
         }
     }
 }
 
-/*
- * This function calculates x^n for polynomial evaluation.
- */
-int power(int x, int n) {
-    // Calculates x^n
-    int result = 1;
-
-    for (int i = 0; i < n; i++) {
-        result *= x;
-    }
-    return result;
-}
 
 /*
  * This function evaluates four different polynomials, one for each row in the column.
@@ -78,7 +49,15 @@ void multiply_with_polynomial(int column) {
         int m5 = message[5][column];
         int m6 = message[6][column];
 
-        int result = polynomialCoefficients[row][0] * power(m0, 1) + polynomialCoefficients[row][1] * power(m1, 2) + polynomialCoefficients[row][2] * power(m2, 3) + polynomialCoefficients[row][3] * power(m3, 4) + polynomialCoefficients[row][4] * power(m4, 5) + polynomialCoefficients[row][5] * power(m5, 6) + polynomialCoefficients[row][6] * power(m6, 7);
+        int result =
+            polynomialCoefficients[row][0] * m0 +
+            polynomialCoefficients[row][1] * (m1 * m1) +
+            polynomialCoefficients[row][2] * (m2 * m2 * m2) +
+            polynomialCoefficients[row][3] * (m3 * m3 * m3 * m3) +
+            polynomialCoefficients[row][4] * (m4 * m4 * m4 * m4 * m4) +
+            polynomialCoefficients[row][5] * (m5 * m5 * m5 * m5 * m5 * m5) +
+            polynomialCoefficients[row][6] * (m6 * m6 * m6 * m6 * m6 * m6 * m6);
+
         message[row][column] = result;
     }
 }
@@ -87,9 +66,14 @@ void multiply_with_polynomial(int column) {
  * For each column, mix the values by evaluating them as parameters of multiple polynomials.
  * This corresponds to step 2.3 in the VV-AES explanation.
  */
-void mix_columns() {
+void mix_columns_and_add_key() {
     for (int column = 0; column < BLOCK_SIZE; ++column) {
         multiply_with_polynomial(column);
+
+        for (int row = 0; row < BLOCK_SIZE; ++row) {
+            // ^ == XOR
+            message[row][column] = message[row][column] ^ key[row][column];
+        }
     }
 }
 
@@ -128,14 +112,11 @@ int main() {
             //In each round, we use a different key derived from the original (refer to the key schedule).
             set_next_key();
             // These are the four steps described in the slides.
-            substitute_bytes();
-            shift_rows();
-            mix_columns();
-            add_key();
+            substitute_and_shift_rows();
+            mix_columns_and_add_key();
         }
         // Final round
-        substitute_bytes();
-        shift_rows();
+        substitute_and_shift_rows();
         add_key();
     }
 
