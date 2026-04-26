@@ -9,10 +9,10 @@
  * This corresponds to step 2.1 in the VV-AES explanation.
  */
 
-uint8_t directSubstitue[256];
+uint8_t directSubstitute[256];
 void build_direct_substitute(){
     for (int i = 0; i < UNIQUE_CHARACTERS; i++) {
-        directSubstitue[originalCharacter[i]] = substitutedCharacter[i];
+        directSubstitute[originalCharacter[i]] = substitutedCharacter[i];
     }
 }
 
@@ -22,7 +22,7 @@ void substitute_bytes() {
         for (int row = 0; row < BLOCK_SIZE; row++) {
             // Search for the byte in the original character list
             // and replace it with corresponding the element in the substituted character list
-            message[row][column] = directSubstitue[message[row][column]];
+            message[row][column] = directSubstitute[message[row][column]];
         }
     }
 }
@@ -70,10 +70,15 @@ int power(int x, int n) {
  */
 void multiply_with_polynomial(int column) {
     for (int row = 0; row < BLOCK_SIZE; ++row) {
-        int result = 0;
-        for (int degree = 0; degree < BLOCK_SIZE; degree++) {
-            result += polynomialCoefficients[row][degree] * power(message[degree][column], degree + 1);
-        }
+        int m0 = message[0][column];
+        int m1 = message[1][column];
+        int m2 = message[2][column];
+        int m3 = message[3][column];
+        int m4 = message[4][column];
+        int m5 = message[5][column];
+        int m6 = message[6][column];
+
+        int result = polynomialCoefficients[row][0] * power(m0, 1) + polynomialCoefficients[row][1] * power(m1, 2) + polynomialCoefficients[row][2] * power(m2, 3) + polynomialCoefficients[row][3] * power(m3, 4) + polynomialCoefficients[row][4] * power(m4, 5) + polynomialCoefficients[row][5] * power(m5, 6) + polynomialCoefficients[row][6] * power(m6, 7);
         message[row][column] = result;
     }
 }
