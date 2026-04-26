@@ -52,10 +52,12 @@ void shift_rows() {
  */
 int power(int x, int n) {
     // Calculates x^n
-    if (n == 0) {
-        return 1;
+    int result = 1;
+
+    for (int i = 0; i < n; i++) {
+        result *= x;
     }
-    return x * power(x, n - 1);
+    return result;
 }
 
 /*
