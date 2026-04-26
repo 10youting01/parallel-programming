@@ -10,7 +10,7 @@
  */
 
 uint8_t directSubstitue[256];
-void build_direct_substitue(){
+void build_direct_substitute(){
     for (int i = 0; i < UNIQUE_CHARACTERS; i++) {
         directSubstitue[originalCharacter[i]] = substitutedCharacter[i];
     }
@@ -28,20 +28,6 @@ void substitute_bytes() {
 }
 
 /*
- * This function shifts (rotates) a row in the message array by one place to the left.
- * @param row The row which to shift.
- */
-void shift_row(int row) {
-    // This does a shift (really a rotate) of a row, copying each element to the left
-    uint8_t first = message[row][0];
-
-    for (int i = 0; i < BLOCK_SIZE - 1; i++) {
-        message[row][i] = message[row][i + 1];
-    }
-    message[row][BLOCK_SIZE - 1] = first;
-}
-
-/*
  * This function shifts each row by the number of places it is meant to be shifted according to the AES specification.
  * Row zero is shifted by zero places. Row one by one, etc.
  * This corresponds to step 2.2 in the VV-AES explanation.
@@ -49,8 +35,14 @@ void shift_row(int row) {
 void shift_rows() {
     // Shift each row, where the row index corresponds to how many columns the data is shifted.
     for (int row = 0; row < BLOCK_SIZE; ++row) {
-        for (int shifts = 0; shifts < row; ++shifts) {
-            shift_row(row);
+        uint8_t oldRow[BLOCK_SIZE];
+
+        for (int col = 0; col < BLOCK_SIZE; col++) {
+            oldRow[col] = message[row][col];
+        }
+
+        for (int col = 0; col < BLOCK_SIZE; col++) {
+            message[row][col] = oldRow[(col + row) % BLOCK_SIZE];
         }
     }
 }
@@ -112,7 +104,7 @@ void add_key() {
 int main() {
     // Receive the problem from the system.
     readInput();
-    build_direct_substitue();
+    build_direct_substitute();
 
     // For extra security (and because Varys wasn't able to find enough test messages to keep you occupied) each message
     // is put through VV-AES lots of times. If we can't stop the adverse Maesters from decrypting our highly secure
@@ -128,7 +120,6 @@ int main() {
         for (int round = 0; round < ROUNDS; round++) {
             //In each round, we use a different key derived from the original (refer to the key schedule).
             set_next_key();
-
             // These are the four steps described in the slides.
             substitute_bytes();
             shift_rows();
