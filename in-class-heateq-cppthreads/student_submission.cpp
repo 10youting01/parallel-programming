@@ -1,12 +1,23 @@
 #include "Utility.h"
 // ######################## TODO: include library for enabling thread and mutex ########################
-
+#include <thread>
+#include <barrier>
+#include <vector>
 // ######################## TODO END ########################
 
 #define FILENAME        "u_sim.f64"
 
-#define THREAD_NUM      24
+#ifndef THREAD_NUM
+#define THREAD_NUM      4
+#endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+#define LOCAL_OPTIMIZE __attribute__((optimize("O3,no-tree-vectorize,fp-contract=off")))
+#else
+#define LOCAL_OPTIMIZE
+#endif
+
+LOCAL_OPTIMIZE
 void compute_stencil(double *__restrict__ u, double *__restrict__ u_new, double a, const size_t local_size)
 {
     for (size_t x = 0; x < local_size; x++) {
@@ -19,34 +30,69 @@ double *simulation(double *__restrict__ u0, double *__restrict__ u1, double a, F
     double *u = u0;
     double *u_new = u1;
 
+    const size_t total_work = GRID_SIZE - 2;
+    unsigned int thread_count = std::thread::hardware_concurrency();
+
+    if (thread_count == 0) {
+        thread_count = 1;
+    }
+
+    if (thread_count > THREAD_NUM) {
+        thread_count = THREAD_NUM;
+    }
+
+    if (thread_count > total_work) {
+        thread_count = static_cast<unsigned int>(total_work);
+    }
+
+    std::vector<size_t> starts(thread_count);
+    std::vector<size_t> work_sizes(thread_count);
+    std::vector<std::thread> threads;
+    threads.reserve(thread_count);
+
+    const size_t local_size = total_work / thread_count;
+    const size_t remainder = total_work % thread_count;
+    size_t offset = 0;
+
+    for (unsigned int thread_id = 0; thread_id < thread_count; ++thread_id) {
+        const size_t thread_work = local_size + (thread_id < remainder ? 1 : 0);
+        starts[thread_id] = 1 + offset;
+        work_sizes[thread_id] = thread_work;
+        offset += thread_work;
+    }
+
+    std::barrier start_barrier(thread_count + 1);
+    std::barrier done_barrier(thread_count + 1);
+
+    for (unsigned int thread_id = 0; thread_id < thread_count; ++thread_id) {
+        threads.emplace_back([&, thread_id]() {
+            const size_t start = starts[thread_id];
+            const size_t work_size = work_sizes[thread_id];
+
+            for (size_t t = 1; t < N_STEPS; ++t) {
+                start_barrier.arrive_and_wait();
+                compute_stencil(u + start, u_new + start, a, work_size);
+                done_barrier.arrive_and_wait();
+            }
+        });
+    }
+
     for (size_t t = 1; t < N_STEPS; t++) {
         if ((file != nullptr)
+            && (print_rate > 0)
             && (t % print_rate == 0))
         {
             print_u(file, u);
         }
 
-        std::thread threads[THREAD_NUM];
-
-        // ######################## TODO: compute size that each thread needs to process ########################
-        size_t total_work = TODO;
-        size_t local_size = TODO;
-        size_t remainder = TODO;
-        // ######################## TODO END ########################
-
-        for (int thread_id = 0; thread_id < THREAD_NUM; ++thread_id) {
-            // ######################## TODO: create thread to call the working_thread function and pass the buffer element as argument ########################
-
-            // ######################## TODO END ########################
-        }
-
-        for (int thread_id = 0; thread_id < THREAD_NUM; ++thread_id) {
-            // ######################## TODO: join thread to terminate thread ########################
-
-            // ######################## TODO END ########################
-        }
+        start_barrier.arrive_and_wait();
+        done_barrier.arrive_and_wait();
 
         std::swap(u, u_new);
+    }
+
+    for (std::thread &thread : threads) {
+        thread.join();
     }
 
     return u_new;
